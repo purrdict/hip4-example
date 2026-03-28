@@ -268,12 +268,12 @@ function TradeForm({
   const sharesNum = parseInt(qty, 10) || 0;
   const cost = sharesNum * effectivePrice;
 
-  // Reset qty on side/direction change
+  // Reset qty on side/direction change (state adjustment during render — no useEffect needed)
   const prevKey = `${sideIndex}:${direction}`;
   const prevKeyRef = useRef(prevKey);
   if (prevKeyRef.current !== prevKey) {
     prevKeyRef.current = prevKey;
-    // state adjustment during render (not useEffect) for immediate reset
+    setQty("");
   }
 
   // Agent key setup (lifecycle only)
@@ -685,11 +685,31 @@ function TradeForm({
 
 // ─── Market detail (main export) ──────────────────────────────────
 
-export function MarketDetail({ market }: { market: Market }) {
+export function MarketDetail({ market, siblings }: { market: Market; siblings?: Market[] }) {
+  // For multi-outcome question markets, show outcome tabs using sibling markets.
+  // selectedSide tracks Yes(0)/No(1) within the active outcome.
+  // activeOutcomeId tracks which outcome is selected when siblings are provided.
   const [selectedSide, setSelectedSide] = useState<0 | 1>(0);
   const [direction, setDirection] = useState<Direction>("buy");
+  const [activeOutcomeId, setActiveOutcomeId] = useState<number>(market.outcomeId);
 
-  const side = market.sides[selectedSide];
+  // Reset active outcome when the root market changes (e.g. switching question groups)
+  const prevMarketRef = useRef(market.outcomeId);
+  if (prevMarketRef.current !== market.outcomeId) {
+    prevMarketRef.current = market.outcomeId;
+    setActiveOutcomeId(market.outcomeId);
+    setSelectedSide(0);
+    setDirection("buy");
+  }
+
+  // Resolve the active market: for multi-outcome, find the sibling matching activeOutcomeId
+  const isMultiOutcome = Boolean(siblings && siblings.length > 1);
+  const activeMarket: Market =
+    isMultiOutcome && siblings
+      ? (siblings.find((s) => s.outcomeId === activeOutcomeId) ?? market)
+      : market;
+
+  const side = activeMarket.sides[selectedSide];
   const meta = market.type === "recurring" ? parseRecurringDescription(market.description) : null;
   const expiryDate = meta?.expiry ? parseExpiryDate(meta.expiry) : null;
 
@@ -723,10 +743,10 @@ export function MarketDetail({ market }: { market: Market }) {
     : null;
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-[calc(100vh-140px)]">
       {/* ── Market header ────────────────────────────────── */}
       <div
-        className="px-5 py-4 border-b"
+        className="shrink-0 px-5 py-4 border-b"
         style={{ borderColor: "var(--border)" }}
       >
         <div className="flex items-start justify-between gap-3">
@@ -768,13 +788,52 @@ export function MarketDetail({ market }: { market: Market }) {
         </div>
       </div>
 
-      {/* ── Side tabs ────────────────────────────────────── */}
-      {market.sides.length > 1 && (
+      {/* ── Side / Outcome tabs ────────────────────────── */}
+      {isMultiOutcome && siblings ? (
+        /* Multi-outcome: show outcome name tabs (e.g. Akami, Canned Tuna) */
         <div
-          className="px-5 py-3 border-b flex gap-2"
+          className="shrink-0 px-5 py-3 border-b flex gap-2 overflow-x-auto"
           style={{ borderColor: "var(--border)" }}
         >
-          {market.sides.map((s, i) => {
+          {siblings.map((sib) => {
+            const isSelected = activeOutcomeId === sib.outcomeId;
+            const yesMid = sib.sides[0]?.midPrice;
+            return (
+              <button
+                key={sib.outcomeId}
+                type="button"
+                onClick={() => {
+                  setActiveOutcomeId(sib.outcomeId);
+                  setSelectedSide(0);
+                }}
+                className="shrink-0 rounded-xl py-2.5 px-3 text-sm font-semibold transition-all"
+                style={{
+                  background: isSelected
+                    ? "oklch(0.93 0.26 128 / 0.15)"
+                    : "var(--muted)",
+                  color: isSelected ? "var(--success)" : "var(--muted-foreground)",
+                  border: `1px solid ${
+                    isSelected ? "oklch(0.93 0.26 128 / 0.3)" : "var(--border)"
+                  }`,
+                }}
+              >
+                {sib.name}
+                {yesMid != null && (
+                  <span className="ml-1.5 text-[11px] font-mono opacity-80 tabular-nums">
+                    {(yesMid * 100).toFixed(1)}¢
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ) : activeMarket.sides.length > 1 ? (
+        /* Binary / recurring: show Yes/No side tabs */
+        <div
+          className="shrink-0 px-5 py-3 border-b flex gap-2"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {activeMarket.sides.map((s, i) => {
             const isSelected = selectedSide === i;
             const isYes = i === 0;
             return (
@@ -813,15 +872,16 @@ export function MarketDetail({ market }: { market: Market }) {
             );
           })}
         </div>
-      )}
+      ) : null}
 
       {/* ── Chart ─────────────────────────────────────────── */}
       {side && (
-        <div className="border-b" style={{ borderColor: "var(--border)" }}>
+        <div className="shrink-0 border-b" style={{ borderColor: "var(--border)" }}>
           {meta ? (
             /* Recurring: show underlying asset price with target line */
             <div className="overflow-hidden">
               <LivePriceChart
+                key={meta.underlying}
                 symbol={meta.underlying}
                 targetPrice={meta.targetPrice}
                 height={200}
@@ -839,7 +899,7 @@ export function MarketDetail({ market }: { market: Market }) {
 
       {/* ── Orderbook ─────────────────────────────────────── */}
       {side && (
-        <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+        <div className="flex-1 overflow-y-auto min-h-0 px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
           <div className="flex items-center justify-between mb-3">
             <h3
               className="text-[11px] font-semibold uppercase tracking-widest font-display"
@@ -859,7 +919,7 @@ export function MarketDetail({ market }: { market: Market }) {
       )}
 
       {/* ── Trade form ─────────────────────────────────────── */}
-      <div className="px-5 py-4">
+      <div className="shrink-0 px-5 py-4">
         {/* Buy / Sell toggle */}
         <div className="flex gap-4 border-b mb-4 pb-0" style={{ borderColor: "var(--border)" }}>
           {(["buy", "sell"] as Direction[]).map((d) => (
@@ -888,7 +948,7 @@ export function MarketDetail({ market }: { market: Market }) {
         </div>
 
         <TradeForm
-          market={market}
+          market={activeMarket}
           sideIndex={selectedSide}
           direction={direction}
           book={book}

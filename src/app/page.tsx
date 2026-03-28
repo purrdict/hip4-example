@@ -5,9 +5,16 @@ import type { Market } from "@/types/market";
 import { MarketList } from "@/components/market-list";
 import { MarketDetail } from "@/components/market-detail";
 import { ConnectButton } from "@/components/connect-button";
+import { useMarkets } from "@/hooks/use-markets";
 
 export default function Home() {
   const [selectedMarket, setSelectedMarket] = useState<Market | null>(null);
+  const { questions } = useMarkets();
+
+  // Find sibling outcomes for the selected market if it belongs to a question group
+  const selectedSiblings: Market[] | undefined = selectedMarket?.questionId != null
+    ? questions.find((q) => q.questionId === selectedMarket.questionId)?.outcomes
+    : undefined;
 
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
@@ -103,7 +110,7 @@ export default function Home() {
                 className="rounded-xl border sticky top-20"
                 style={{ background: "var(--card)", borderColor: "var(--border)" }}
               >
-                <MarketDetail market={selectedMarket} />
+                <MarketDetail market={selectedMarket} siblings={selectedSiblings} />
               </div>
             ) : (
               <div

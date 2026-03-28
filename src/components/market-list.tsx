@@ -435,15 +435,7 @@ function MarketCard({
   selected: boolean;
   onClick: () => void;
 }) {
-  const hasNamedSides =
-    market.sides.length >= 2 &&
-    market.sides[0].name !== "Yes" &&
-    market.sides[1]?.name !== "No";
-
-  if (hasNamedSides) {
-    return <NamedBinaryCard market={market} selected={selected} onClick={onClick} />;
-  }
-
+  // All standalone binary markets (named or Yes/No) use the same card layout
   return <NamedBinaryCard market={market} selected={selected} onClick={onClick} />;
 }
 
