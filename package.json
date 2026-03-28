@@ -10,6 +10,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@purrdict/hip4-ui": "workspace:*",
     "@nktkas/hyperliquid": "^0.32.1",
     "@tanstack/react-query": "^5",
     "clsx": "^2.1.1",
