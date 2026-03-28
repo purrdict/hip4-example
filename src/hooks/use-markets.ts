@@ -13,18 +13,21 @@ import {
   type MarketStoreState,
 } from "@/lib/market-store";
 
+// Cached server snapshot — MUST be stable reference to avoid infinite loop
+const SERVER_SNAPSHOT: MarketStoreState = {
+  markets: [],
+  questions: [],
+  mids: {},
+  perpMids: {},
+  status: "idle" as const,
+  error: null,
+};
+
 export function useMarkets(): MarketStoreState {
   const state = useSyncExternalStore(
     subscribeMarkets,
     getMarketSnapshot,
-    // Server snapshot — return idle state for SSR
-    () => ({
-      markets: [],
-      mids: {},
-      perpMids: {},
-      status: "idle" as const,
-      error: null,
-    })
+    () => SERVER_SNAPSHOT,
   );
 
   // Lifecycle only: kick off data loading once on mount

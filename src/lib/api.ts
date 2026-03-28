@@ -57,3 +57,28 @@ export function fetchAllMids(): Promise<AllMidsResponse> {
 export function fetchL2Book(coin: string): Promise<L2BookResponse> {
   return info({ type: "l2Book", coin });
 }
+
+export type CandleSnap = {
+  t: number;  // open time ms
+  T: number;  // close time ms
+  s: string;  // symbol
+  i: string;  // interval
+  o: string;  // open
+  c: string;  // close
+  h: string;  // high
+  l: string;  // low
+  v: string;  // volume
+  n: number;  // num trades
+};
+
+export function fetchCandleSnapshot(
+  coin: string,
+  interval: string,
+  startTime: number,
+  endTime: number,
+): Promise<CandleSnap[]> {
+  return info({
+    type: "candleSnapshot",
+    req: { coin, interval, startTime, endTime },
+  });
+}

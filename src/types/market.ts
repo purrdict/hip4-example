@@ -43,6 +43,16 @@ export type Market = {
   type: "binary" | "multi-outcome" | "recurring";
 };
 
+/** A multi-outcome question group (e.g. "What will Hypurr eat?") */
+export type QuestionGroup = {
+  questionId: number;
+  questionName: string;
+  /** Named outcomes (tradeable) sorted by probability */
+  outcomes: Market[];
+  /** Fallback outcome ID (untradeable, hide from UI) */
+  fallbackOutcomeId: number | null;
+};
+
 /** Recurring market parsed description */
 export type RecurringMeta = {
   class: string;

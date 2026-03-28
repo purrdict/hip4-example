@@ -10,65 +10,84 @@ export default function Home() {
   const [selectedMarket, setSelectedMarket] = useState<Market | null>(null);
 
   return (
-    <div className="min-h-screen" style={{ background: "#0a0f1a" }}>
-      {/* Header */}
+    <div className="min-h-screen" style={{ background: "var(--background)" }}>
+      {/* ── Header ──────────────────────────────────────────────── */}
       <header
         className="sticky top-0 z-50 border-b"
-        style={{ background: "rgba(10,15,26,0.95)", borderColor: "#1e293b", backdropFilter: "blur(8px)" }}
+        style={{
+          background: "oklch(0.09 0.008 50 / 0.92)",
+          borderColor: "var(--border)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+        }}
       >
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+        <div className="max-w-screen-xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+          {/* Logo */}
           <div className="flex items-center gap-3">
             <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold"
-              style={{ background: "#10b981", color: "#0a0f1a" }}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold font-display"
+              style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
             >
               P
             </div>
-            <div>
-              <span className="font-semibold text-sm" style={{ color: "#f1f5f9" }}>purrdict</span>
+            <div className="flex items-baseline gap-2">
+              <span className="font-display font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+                purrdict
+              </span>
               <span
-                className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded"
-                style={{ background: "#0f2a1e", color: "#34d399" }}
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded font-mono tracking-wider"
+                style={{ background: "oklch(0.93 0.26 128 / 0.12)", color: "var(--primary)" }}
               >
                 TESTNET
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Nav */}
+          <div className="flex items-center gap-5">
             <a
-              href="https://github.com/purrdict/hip4-example"
+              href="https://purrdict.xyz"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs transition-colors"
-              style={{ color: "#64748b" }}
-              onMouseOver={(e) => (e.currentTarget.style.color = "#94a3b8")}
-              onMouseOut={(e) => (e.currentTarget.style.color = "#64748b")}
+              style={{ color: "var(--muted-foreground)" }}
+              onMouseOver={(e) => (e.currentTarget.style.color = "var(--foreground)")}
+              onMouseOut={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
             >
-              GitHub
+              purrdict.xyz
             </a>
             <ConnectButton />
           </div>
         </div>
       </header>
 
-      {/* Testnet notice */}
+      {/* ── Testnet notice ───────────────────────────────────────── */}
       <div
-        className="text-center text-xs py-2 px-4"
-        style={{ background: "#0f1d30", borderBottom: "1px solid #1e3a5f", color: "#60a5fa" }}
+        className="text-center text-[11px] py-1.5 px-4 font-mono"
+        style={{
+          background: "oklch(0.15 0.04 250 / 0.5)",
+          borderBottom: "1px solid oklch(0.25 0.05 250 / 0.4)",
+          color: "oklch(0.72 0.08 250)",
+        }}
       >
-        Connected to <strong>Hyperliquid Testnet</strong> — No real funds. For demonstration only.
+        Connected to <strong>Hyperliquid Testnet</strong> — no real funds, for demonstration only
       </div>
 
-      {/* Main content */}
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
-          {/* Left panel — market list */}
+      {/* ── Main content ────────────────────────────────────────── */}
+      <div className="max-w-screen-xl mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6">
+
+          {/* Left — market list */}
           <div>
-            <div className="mb-4">
-              <h1 className="text-lg font-bold" style={{ color: "#f1f5f9" }}>Prediction Markets</h1>
-              <p className="text-sm mt-0.5" style={{ color: "#64748b" }}>
-                HIP-4 on Hyperliquid. Click a market to view orderbook and trade.
+            <div className="mb-5">
+              <h1
+                className="text-xl font-display font-semibold"
+                style={{ color: "var(--foreground)" }}
+              >
+                Prediction Markets
+              </h1>
+              <p className="text-sm mt-1" style={{ color: "var(--muted-foreground)" }}>
+                HIP-4 on Hyperliquid. Click to view orderbook and trade.
               </p>
             </div>
             <MarketList
@@ -77,40 +96,59 @@ export default function Home() {
             />
           </div>
 
-          {/* Right panel — market detail */}
+          {/* Right — market detail */}
           <div>
             {selectedMarket ? (
               <div
-                className="rounded-xl border p-5 sticky top-20"
-                style={{ background: "#0f172a", borderColor: "#1e293b" }}
+                className="rounded-xl border sticky top-20"
+                style={{ background: "var(--card)", borderColor: "var(--border)" }}
               >
                 <MarketDetail market={selectedMarket} />
               </div>
             ) : (
               <div
-                className="rounded-xl border flex flex-col items-center justify-center min-h-[400px] text-center p-8"
-                style={{ background: "#0f172a", borderColor: "#1e293b" }}
+                className="rounded-xl border flex flex-col items-center justify-center min-h-[480px] text-center p-8 sticky top-20"
+                style={{ background: "var(--card)", borderColor: "var(--border)" }}
               >
-                <div className="text-4xl mb-4">📊</div>
-                <p className="font-medium mb-1" style={{ color: "#94a3b8" }}>Select a market</p>
-                <p className="text-sm" style={{ color: "#475569" }}>
-                  Click any market from the list to view the live orderbook and place trades.
+                <div className="mb-4">
+                  <svg
+                    width="40"
+                    height="40"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    style={{ color: "var(--border)", margin: "0 auto" }}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m7 16 4-4 4 4 3-6" />
+                  </svg>
+                </div>
+                <p
+                  className="font-display font-medium text-base mb-1.5"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Select a market
+                </p>
+                <p className="text-sm leading-relaxed" style={{ color: "oklch(0.40 0.007 70)" }}>
+                  Click any market from the list to view the live orderbook and place orders.
                 </p>
               </div>
             )}
           </div>
+
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="mt-12 pb-8 text-center">
-        <p className="text-xs" style={{ color: "#334155" }}>
-          Open source example app for{" "}
+      {/* ── Footer ──────────────────────────────────────────────── */}
+      <footer className="mt-16 pb-8 text-center">
+        <p className="text-xs" style={{ color: "oklch(0.32 0.007 70)" }}>
+          Open source example for{" "}
           <a
             href="https://purrdict.xyz"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: "#10b981" }}
+            style={{ color: "var(--primary)" }}
             className="hover:underline"
           >
             purrdict.xyz

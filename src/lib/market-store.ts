@@ -17,10 +17,13 @@ import {
   parseRecurringDescription,
   type Market,
   type MarketSide,
+  type QuestionGroup,
 } from "@/types/market";
 
 export type MarketStoreState = {
   markets: Market[];
+  /** Multi-outcome question groups */
+  questions: QuestionGroup[];
   mids: Record<string, number>;
   perpMids: Record<string, number>;
   status: "idle" | "loading" | "ready" | "error";
@@ -31,6 +34,7 @@ export type MarketStoreState = {
 
 let state: MarketStoreState = {
   markets: [],
+  questions: [],
   mids: {},
   perpMids: {},
   status: "idle",
@@ -64,8 +68,11 @@ const perpSymbols = new Set<string>();
 function buildMarketsFromMeta(
   meta: { outcomes: { outcome: number; name: string; description: string; sideSpecs: { name: string }[] }[]; questions: { question: number; name: string; description: string; fallbackOutcome: number; namedOutcomes: number[]; settledNamedOutcomes: number[] }[] },
   rawMids: AllMidsResponse
-): { markets: Market[]; mids: Record<string, number>; perpMids: Record<string, number> } {
+): { markets: Market[]; questions: QuestionGroup[]; mids: Record<string, number>; perpMids: Record<string, number> } {
   const questionMap = new Map(meta.questions.map((q) => [q.question, q]));
+
+  // Set of all fallback outcome IDs — these are untradeable, hide from UI
+  const fallbackIds = new Set(meta.questions.map((q) => q.fallbackOutcome));
 
   function findQuestion(outcomeId: number) {
     for (const q of questionMap.values()) {
@@ -103,6 +110,21 @@ function buildMarketsFromMeta(
     };
   });
 
+  // Build question groups (multi-outcome only) — exclude fallback outcomes
+  const questions: QuestionGroup[] = meta.questions
+    .filter((q) => q.namedOutcomes.length > 1)
+    .map((q) => {
+      const outcomes = q.namedOutcomes
+        .map((id) => markets.find((m) => m.outcomeId === id))
+        .filter((m): m is Market => m !== undefined);
+      return {
+        questionId: q.question,
+        questionName: q.name,
+        outcomes,
+        fallbackOutcomeId: q.fallbackOutcome,
+      };
+    });
+
   // Collect perp symbols from recurring markets
   for (const m of markets) {
     if (m.type === "recurring") {
@@ -121,7 +143,7 @@ function buildMarketsFromMeta(
     }
   }
 
-  return { markets, mids, perpMids };
+  return { markets, questions, mids, perpMids };
 }
 
 // ─── Initialization ────────────────────────────────────────────────────────
@@ -155,7 +177,7 @@ function startWsFeed() {
     }
 
     if (changed) {
-      // Also update market side mid prices
+      // Update market side mid prices
       const updatedMarkets = state.markets.map((m) => ({
         ...m,
         sides: m.sides.map((s) => ({
@@ -163,7 +185,18 @@ function startWsFeed() {
           midPrice: newMids[s.coin] ?? s.midPrice,
         })),
       }));
-      setState({ mids: newMids, perpMids: newPerpMids, markets: updatedMarkets });
+      // Update question group outcomes mid prices
+      const updatedQuestions = state.questions.map((q) => ({
+        ...q,
+        outcomes: q.outcomes.map((m) => ({
+          ...m,
+          sides: m.sides.map((s) => ({
+            ...s,
+            midPrice: newMids[s.coin] ?? s.midPrice,
+          })),
+        })),
+      }));
+      setState({ mids: newMids, perpMids: newPerpMids, markets: updatedMarkets, questions: updatedQuestions });
     }
   });
 }
@@ -184,8 +217,8 @@ export function initMarkets(): Promise<void> {
         fetchAllMids(),
       ]);
 
-      const { markets, mids, perpMids } = buildMarketsFromMeta(meta, rawMids);
-      setState({ markets, mids, perpMids, status: "ready" });
+      const { markets, questions, mids, perpMids } = buildMarketsFromMeta(meta, rawMids);
+      setState({ markets, questions, mids, perpMids, status: "ready" });
       startWsFeed();
     } catch (err) {
       setState({

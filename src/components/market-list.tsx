@@ -1,20 +1,159 @@
 "use client";
 
 import { useMarkets } from "@/hooks/use-markets";
-import type { Market } from "@/types/market";
+import type { Market, QuestionGroup } from "@/types/market";
 import {
   parseRecurringDescription,
   parseExpiryDate,
   formatCountdown,
 } from "@/types/market";
+import { useState, useEffect } from "react";
 
-// Underlying → emoji mapping for recurring markets
-const UNDERLYING_EMOJI: Record<string, string> = {
-  BTC: "₿",
-  ETH: "Ξ",
-  SOL: "◎",
-  HYPE: "⚡",
+// ─── Helpers ──────────────────────────────────────────────────────
+
+const UNDERLYING_NAMES: Record<string, string> = {
+  BTC: "Bitcoin",
+  ETH: "Ethereum",
+  SOL: "Solana",
+  HYPE: "Hyperliquid",
+  XRP: "XRP",
+  DOGE: "Dogecoin",
+  AVAX: "Avalanche",
+  LINK: "Chainlink",
 };
+
+function formatRecurringTitle(underlying: string, expiry: string, period: string): string {
+  const name = UNDERLYING_NAMES[underlying] ?? underlying;
+  if (period !== "1d" && period !== "1w") {
+    const short: Record<string, string> = {
+      "1h": "Hourly", "4h": "4H", "30m": "30 Min", "15m": "15 Min", "5m": "5 Min",
+    };
+    return `${name} ${short[period] ?? period} Up or Down?`;
+  }
+  const date = parseExpiryDate(expiry);
+  if (!date) return `${name} Up or Down?`;
+  const month = date.toLocaleDateString("en-US", { month: "long" });
+  const day = date.getDate();
+  return `${name} Up or Down by ${month} ${day}?`;
+}
+
+// ─── Coin logo ────────────────────────────────────────────────────
+
+function CoinLogo({ symbol, size = 32 }: { symbol: string; size?: number }) {
+  const [err, setErr] = useState(false);
+  const url = `https://app.hyperliquid.xyz/coins/${symbol}.svg`;
+
+  if (err) {
+    return (
+      <div
+        className="rounded-full flex items-center justify-center font-bold shrink-0"
+        style={{
+          width: size,
+          height: size,
+          background: "var(--muted)",
+          color: "var(--muted-foreground)",
+          fontSize: size * 0.3,
+          fontFamily: "Space Grotesk, system-ui, sans-serif",
+        }}
+      >
+        {symbol.slice(0, 2)}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-full overflow-hidden shrink-0"
+      style={{
+        width: size,
+        height: size,
+        background: "var(--muted)",
+        border: "1px solid var(--border)",
+      }}
+    >
+      <img
+        src={url}
+        alt={symbol}
+        width={size}
+        height={size}
+        onError={() => setErr(true)}
+        style={{ objectFit: "cover", width: "100%", height: "100%" }}
+      />
+    </div>
+  );
+}
+
+// ─── Countdown hook ────────────────────────────────────────────────
+
+function useCountdown(expiryDate: Date | null): string {
+  const [countdown, setCountdown] = useState(() =>
+    expiryDate ? formatCountdown(expiryDate) : "—"
+  );
+  useEffect(() => {
+    if (!expiryDate) return;
+    setCountdown(formatCountdown(expiryDate));
+    const id = setInterval(() => setCountdown(formatCountdown(expiryDate)), 1000);
+    return () => clearInterval(id);
+  }, [expiryDate]);
+  return countdown;
+}
+
+// ─── Card shell ────────────────────────────────────────────────────
+
+function CardShell({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter") onClick(); }}
+      className="rounded-2xl border cursor-pointer flex flex-col transition-all duration-150 overflow-hidden"
+      style={{
+        background: "var(--card)",
+        borderColor: selected ? "oklch(0.93 0.26 128 / 0.5)" : "var(--border)",
+        boxShadow: selected ? "0 0 0 1px oklch(0.93 0.26 128 / 0.15)" : "none",
+      }}
+      onMouseOver={(e) => {
+        if (!selected) {
+          (e.currentTarget as HTMLElement).style.borderColor = "oklch(0.30 0.008 50)";
+        }
+      }}
+      onMouseOut={(e) => {
+        if (!selected) {
+          (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+        }
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ─── Live dot ─────────────────────────────────────────────────────
+
+function LiveDot() {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+      </span>
+      <span className="text-[11px] font-bold uppercase tracking-wider text-red-500">
+        Live
+      </span>
+    </div>
+  );
+}
+
+// ─── Recurring market card ─────────────────────────────────────────
 
 function RecurringMarketCard({
   market,
@@ -31,77 +170,206 @@ function RecurringMarketCard({
   if (!meta) return null;
 
   const expiryDate = parseExpiryDate(meta.expiry);
-  const countdown = expiryDate ? formatCountdown(expiryDate) : "—";
-  const emoji = UNDERLYING_EMOJI[meta.underlying] ?? "?";
+  const countdown = useCountdown(expiryDate);
 
   const yesSide = market.sides[0];
-  const noSide = market.sides[1];
-  const yesPrice = yesSide?.midPrice;
-  const noPrice = noSide?.midPrice;
+  const yesMid = yesSide?.midPrice;
+  const yesPct = yesMid !== null && yesMid !== undefined ? yesMid * 100 : null;
 
-  const isAbove = meta.targetPrice > 0;
+  const title = formatRecurringTitle(meta.underlying, meta.expiry, meta.period);
+  const isExpired = expiryDate ? expiryDate.getTime() < Date.now() : false;
 
   return (
-    <button
-      onClick={onClick}
-      className={[
-        "w-full text-left rounded-xl border p-4 transition-all duration-150",
-        selected
-          ? "border-emerald-500/60 bg-emerald-500/8 shadow-lg shadow-emerald-500/10"
-          : "border-slate-800 bg-slate-900 hover:border-slate-700 hover:bg-slate-800/80",
-      ].join(" ")}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{emoji}</span>
-          <div>
-            <div className="text-sm font-semibold text-slate-100">
-              {meta.underlying} {isAbove ? "Up" : "Down"} — {meta.period.toUpperCase()}
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5">
-              Target: ${meta.targetPrice.toLocaleString()}
-            </div>
-          </div>
+    <CardShell selected={selected} onClick={onClick}>
+      {/* Logo + title + pct */}
+      <div className="px-4 pt-4 pb-3 flex items-start gap-3">
+        <CoinLogo symbol={meta.underlying} size={36} />
+        <div className="flex-1 min-w-0">
+          <h3
+            className="font-display font-semibold text-[14px] leading-snug"
+            style={{ color: "var(--foreground)" }}
+          >
+            {title}
+          </h3>
+          {perpMid !== null && (
+            <p className="text-[11px] mt-0.5 font-mono tabular-nums" style={{ color: "var(--muted-foreground)" }}>
+              {meta.underlying} ${perpMid.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </p>
+          )}
         </div>
-        <div className="text-right shrink-0">
-          <div className="text-xs text-slate-500">Expires</div>
-          <div className="text-xs font-mono text-amber-400">{countdown}</div>
-        </div>
+        {yesPct !== null && !isExpired && (
+          <span
+            className="text-lg font-bold tabular-nums shrink-0"
+            style={{
+              color:
+                Math.abs(yesPct - 50) < 1
+                  ? "var(--muted-foreground)"
+                  : yesPct > 50
+                  ? "var(--success)"
+                  : "var(--destructive)",
+            }}
+          >
+            {Math.round(yesPct > 50 ? yesPct : 100 - yesPct)}%
+          </span>
+        )}
       </div>
 
-      {/* Live reference price */}
-      {perpMid !== null && (
-        <div className="mb-3 text-xs text-slate-500">
-          {meta.underlying} live:{" "}
-          <span className="text-slate-300 font-mono">${perpMid.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+      {/* Up/Down buttons */}
+      {!isExpired && (
+        <div className="px-4 pb-3">
+          <div className="flex gap-2">
+            <div
+              className="flex-1 text-center rounded-xl py-2.5 text-sm font-semibold"
+              style={{ background: "oklch(0.93 0.26 128 / 0.12)", color: "var(--success)" }}
+            >
+              Up
+            </div>
+            <div
+              className="flex-1 text-center rounded-xl py-2.5 text-sm font-semibold"
+              style={{ background: "oklch(0.62 0.22 25 / 0.12)", color: "var(--destructive)" }}
+            >
+              Down
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Yes/No prices */}
-      <div className="grid grid-cols-2 gap-2">
-        {yesSide && (
-          <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-center">
-            <div className="text-[11px] text-emerald-400/70 mb-0.5">{yesSide.name}</div>
-            <div className="text-sm font-mono font-semibold text-emerald-400">
-              {yesPrice != null ? `${(yesPrice * 100).toFixed(1)}¢` : "—"}
-            </div>
+      {/* Footer */}
+      <div className="px-4 pb-4 flex items-center justify-between">
+        {isExpired ? (
+          <div className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--muted-foreground)" }} />
+            <span className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>Settling…</span>
           </div>
+        ) : (
+          <LiveDot />
         )}
-        {noSide && (
-          <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-center">
-            <div className="text-[11px] text-red-400/70 mb-0.5">{noSide.name}</div>
-            <div className="text-sm font-mono font-semibold text-red-400">
-              {noPrice != null ? `${(noPrice * 100).toFixed(1)}¢` : "—"}
-            </div>
-          </div>
-        )}
+        <div className="text-[11px] font-mono tabular-nums" style={{ color: "oklch(0.78 0.12 70)" }}>
+          {countdown}
+        </div>
       </div>
-    </button>
+    </CardShell>
   );
 }
 
-function OtherMarketCard({
+// ─── Outcome row (inside QuestionCard) ────────────────────────────
+
+function OutcomeRow({
+  market,
+  onClick,
+}: {
+  market: Market;
+  onClick: () => void;
+}) {
+  const yesSide = market.sides[0];
+  const yesMid = yesSide?.midPrice;
+  const pct = yesMid !== null && yesMid !== undefined ? yesMid * 100 : null;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onClick(); } }}
+      className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors cursor-pointer"
+      onMouseOver={(e) => ((e.currentTarget as HTMLElement).style.background = "oklch(0.15 0.007 50)")}
+      onMouseOut={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
+    >
+      <span
+        className="flex-1 text-sm font-medium truncate"
+        style={{ color: "var(--foreground)" }}
+      >
+        {market.name}
+      </span>
+      {pct !== null ? (
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div
+            className="w-14 h-1.5 rounded-full overflow-hidden"
+            style={{ background: "var(--muted)" }}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${pct}%`,
+                background: pct >= 50 ? "var(--success)" : "var(--destructive)",
+                opacity: 0.7,
+              }}
+            />
+          </div>
+          <span
+            className="text-sm font-bold tabular-nums w-10 text-right font-mono"
+            style={{ color: pct >= 50 ? "var(--success)" : "var(--destructive)" }}
+          >
+            {pct.toFixed(0)}%
+          </span>
+        </div>
+      ) : (
+        <span className="text-sm tabular-nums w-10 text-right" style={{ color: "var(--muted-foreground)" }}>
+          —
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Question card (multi-outcome group) ──────────────────────────
+
+function QuestionCard({
+  group,
+  selected,
+  onSelect,
+}: {
+  group: QuestionGroup;
+  selected: boolean;
+  onSelect: (market: Market) => void;
+}) {
+  // Sort by probability descending — highest probability first
+  const sorted = [...group.outcomes].sort((a, b) => {
+    const pa = a.sides[0]?.midPrice ?? 0;
+    const pb = b.sides[0]?.midPrice ?? 0;
+    return pb - pa;
+  });
+  const moreCount = Math.max(0, sorted.length - 3);
+  const visible = sorted.slice(0, 3);
+
+  return (
+    <CardShell selected={selected} onClick={() => onSelect(sorted[0])}>
+      {/* Title */}
+      <div className="px-5 pt-5 pb-2">
+        <h3
+          className="font-display font-semibold text-[14px] leading-snug"
+          style={{ color: "var(--foreground)" }}
+        >
+          {group.questionName}
+        </h3>
+      </div>
+
+      {/* Outcomes */}
+      <div className="px-1.5 pb-2">
+        {visible.map((m) => (
+          <OutcomeRow
+            key={m.outcomeId}
+            market={m}
+            onClick={() => onSelect(m)}
+          />
+        ))}
+      </div>
+
+      {/* Footer count */}
+      <div
+        className="px-5 pb-4 pt-1 mt-auto text-xs"
+        style={{ color: "var(--muted-foreground)" }}
+      >
+        {group.outcomes.length} outcomes
+        {moreCount > 0 && <span style={{ color: "oklch(0.50 0.007 70)" }}> · +{moreCount} more</span>}
+      </div>
+    </CardShell>
+  );
+}
+
+// ─── Named binary card ─────────────────────────────────────────────
+
+function NamedBinaryCard({
   market,
   selected,
   onClick,
@@ -110,47 +378,113 @@ function OtherMarketCard({
   selected: boolean;
   onClick: () => void;
 }) {
+  const sideA = market.sides[0];
+  const sideB = market.sides[1];
+  const pctA = sideA?.midPrice !== null && sideA?.midPrice !== undefined ? Math.round(sideA.midPrice * 100) : null;
+  const pctB = sideB?.midPrice !== null && sideB?.midPrice !== undefined ? Math.round(sideB.midPrice * 100) : null;
+
   return (
-    <button
-      onClick={onClick}
-      className={[
-        "w-full text-left rounded-xl border p-4 transition-all duration-150",
-        selected
-          ? "border-blue-500/60 bg-blue-500/8 shadow-lg shadow-blue-500/10"
-          : "border-slate-800 bg-slate-900 hover:border-slate-700 hover:bg-slate-800/80",
-      ].join(" ")}
-    >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="text-sm font-semibold text-slate-100 line-clamp-2">
-          {market.questionName ?? market.name}
-        </div>
-        <span
-          className={[
-            "shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full",
-            market.type === "binary"
-              ? "bg-blue-500/15 text-blue-400"
-              : "bg-purple-500/15 text-purple-400",
-          ].join(" ")}
+    <CardShell selected={selected} onClick={onClick}>
+      {/* Title */}
+      <div className="px-5 pt-5 pb-3">
+        <h3
+          className="font-display font-semibold text-[14px] leading-snug"
+          style={{ color: "var(--foreground)" }}
         >
-          {market.type === "binary" ? "Binary" : "Multi"}
-        </span>
+          {market.questionName ?? market.name}
+        </h3>
       </div>
-      <div className="flex gap-2 flex-wrap">
-        {market.sides.map((s) => (
+
+      {/* Side buttons */}
+      <div className="px-5 pb-5 mt-auto">
+        <div className="flex gap-2">
           <div
-            key={s.coin}
-            className="text-xs rounded-lg bg-slate-800 border border-slate-700 px-2 py-1"
+            className="flex-1 text-center rounded-xl py-2.5 text-sm font-semibold"
+            style={{
+              background: "oklch(0.93 0.26 128 / 0.12)",
+              color: "var(--success)",
+            }}
           >
-            <span className="text-slate-400">{s.name}: </span>
-            <span className="font-mono text-slate-200">
-              {s.midPrice != null ? `${(s.midPrice * 100).toFixed(1)}¢` : "—"}
-            </span>
+            {sideA?.name} {pctA !== null ? `${pctA}%` : ""}
           </div>
-        ))}
+          {sideB && (
+            <div
+              className="flex-1 text-center rounded-xl py-2.5 text-sm font-semibold"
+              style={{
+                background: "oklch(0.62 0.22 25 / 0.12)",
+                color: "var(--destructive)",
+              }}
+            >
+              {sideB.name} {pctB !== null ? `${pctB}%` : ""}
+            </div>
+          )}
+        </div>
       </div>
-    </button>
+    </CardShell>
   );
 }
+
+// ─── Generic market card ───────────────────────────────────────────
+
+function MarketCard({
+  market,
+  selected,
+  onClick,
+}: {
+  market: Market;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const hasNamedSides =
+    market.sides.length >= 2 &&
+    market.sides[0].name !== "Yes" &&
+    market.sides[1]?.name !== "No";
+
+  if (hasNamedSides) {
+    return <NamedBinaryCard market={market} selected={selected} onClick={onClick} />;
+  }
+
+  return <NamedBinaryCard market={market} selected={selected} onClick={onClick} />;
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────
+
+function SkeletonCard() {
+  return (
+    <div
+      className="rounded-2xl border p-4 space-y-3"
+      style={{ background: "var(--card)", borderColor: "var(--border)" }}
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-full animate-pulse" style={{ background: "var(--muted)" }} />
+        <div className="space-y-2 flex-1">
+          <div className="h-3.5 rounded animate-pulse w-3/4" style={{ background: "var(--muted)" }} />
+          <div className="h-3 rounded animate-pulse w-1/3" style={{ background: "var(--muted)" }} />
+        </div>
+        <div className="h-6 w-10 rounded animate-pulse" style={{ background: "var(--muted)" }} />
+      </div>
+      <div className="flex gap-2">
+        <div className="flex-1 h-10 rounded-xl animate-pulse" style={{ background: "var(--muted)" }} />
+        <div className="flex-1 h-10 rounded-xl animate-pulse" style={{ background: "var(--muted)" }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Section header ────────────────────────────────────────────────
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <h2
+      className="text-[11px] font-semibold uppercase tracking-widest px-0.5 mb-3 font-display"
+      style={{ color: "var(--muted-foreground)" }}
+    >
+      {label}
+    </h2>
+  );
+}
+
+// ─── Main export ──────────────────────────────────────────────────
 
 export function MarketList({
   selectedId,
@@ -159,40 +493,54 @@ export function MarketList({
   selectedId: number | null;
   onSelect: (market: Market) => void;
 }) {
-  const { markets, perpMids, status, error } = useMarkets();
+  const { markets, questions, perpMids, status, error } = useMarkets();
 
   if (status === "idle" || status === "loading") {
     return (
       <div className="flex flex-col gap-3">
-        {[1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className="h-32 rounded-xl bg-slate-900 border border-slate-800 animate-pulse"
-          />
-        ))}
+        {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
       </div>
     );
   }
 
   if (status === "error") {
     return (
-      <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-400">
+      <div
+        className="rounded-xl border p-4 text-sm"
+        style={{
+          background: "oklch(0.62 0.22 25 / 0.08)",
+          borderColor: "oklch(0.62 0.22 25 / 0.25)",
+          color: "var(--destructive)",
+        }}
+      >
         {error ?? "Failed to load markets."}
       </div>
     );
   }
 
+  // IDs in question groups (don't render them individually)
+  const questionOutcomeIds = new Set(
+    questions.flatMap((q) => [
+      ...q.outcomes.map((m) => m.outcomeId),
+      ...(q.fallbackOutcomeId !== null ? [q.fallbackOutcomeId] : []),
+    ])
+  );
+
   const recurring = markets.filter((m) => m.type === "recurring");
-  const others = markets.filter((m) => m.type !== "recurring");
+  // Binary / standalone markets (not in any question group)
+  const standalone = markets.filter(
+    (m) => m.type !== "recurring" && !questionOutcomeIds.has(m.outcomeId)
+  );
+
+  const isEmpty = recurring.length === 0 && standalone.length === 0 && questions.length === 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
+      {/* Recurring */}
       {recurring.length > 0 && (
         <section>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
-            Recurring
-          </h3>
-          <div className="flex flex-col gap-2">
+          <SectionHeader label="Recurring" />
+          <div className="flex flex-col gap-2.5">
             {recurring.map((m) => {
               const meta = parseRecurringDescription(m.description);
               const perpMid = meta?.underlying ? (perpMids[meta.underlying] ?? null) : null;
@@ -210,14 +558,21 @@ export function MarketList({
         </section>
       )}
 
-      {others.length > 0 && (
+      {/* Events: question groups + standalone */}
+      {(questions.length > 0 || standalone.length > 0) && (
         <section>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
-            Markets
-          </h3>
-          <div className="flex flex-col gap-2">
-            {others.map((m) => (
-              <OtherMarketCard
+          <SectionHeader label="Events" />
+          <div className="flex flex-col gap-2.5">
+            {questions.map((q) => (
+              <QuestionCard
+                key={q.questionId}
+                group={q}
+                selected={q.outcomes.some((m) => m.outcomeId === selectedId)}
+                onSelect={onSelect}
+              />
+            ))}
+            {standalone.map((m) => (
+              <MarketCard
                 key={m.outcomeId}
                 market={m}
                 selected={selectedId === m.outcomeId}
@@ -228,8 +583,8 @@ export function MarketList({
         </section>
       )}
 
-      {markets.length === 0 && (
-        <div className="text-sm text-slate-500 text-center py-8">
+      {isEmpty && (
+        <div className="text-sm text-center py-10" style={{ color: "var(--muted-foreground)" }}>
           No active markets found.
         </div>
       )}
